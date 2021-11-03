@@ -1,6 +1,12 @@
+/* @author: 	Stephen Davis (code extended from provided code on blackboard by lecturer Stefan Weber)
+ * student id: 	18324401
+ * */
+
+
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
+import java.util.Scanner;
 
 public class Dashboard extends Node {
 
@@ -12,7 +18,7 @@ public class Dashboard extends Node {
 	static final int FIRST_ACTUATOR_PORT = (FIRST_SENSOR_PORT+NUMBER_OF_SENSORS+1); // Port of the broker (destination)
 
 
-	static final String DEFAULT_DST_NODE = "localhost";	// Name of the host for the Dashboard
+	static final String DEFAULT_DST_NODE = "broker";	// Name of the host for the Dashboard
 
 	static final int HEADER_LENGTH = 2;
 	static final int TYPE_POS = 0;
@@ -32,18 +38,15 @@ public class Dashboard extends Node {
 	static final byte DASHBOARD_PUBLISH = 6; // DASHBOARD
 	static final byte TYPE_ACK = 7;   // Indicating an acknowledgement
 
-	Terminal terminal;
+	Scanner scanner;
 	InetSocketAddress dstAddress;
 
-	/*
-	 * 
-	 */
-	Dashboard(Terminal terminal, int port) {
+	Dashboard(int port) {
 		try {
-			this.terminal= terminal;
 			dstAddress = new InetSocketAddress(DEFAULT_DST_NODE, BROKER_PORT);
 			socket= new DatagramSocket(port);
 			listener.go();
+			scanner = new Scanner(System.in);
 		}
 		catch(java.lang.Exception e) {e.printStackTrace();}
 	}
@@ -55,26 +58,20 @@ public class Dashboard extends Node {
 		try {
 			String content;
 			byte[] data;
-			byte[] buffer;
-
 			data = packet.getData();			
-			switch(data[TYPE_POS]) {
 
+			switch(data[TYPE_POS]) {
 			// Broker has forwarded message from Sensor
 			case BROKER:
 				content = sendACK(packet, data);
-				terminal.println("Message from Broker to Dashboard was: "+content);
 				sendInstruction(content);
 				break;
-
 				// Received ACK from Broker
 			case TYPE_ACK:
-				terminal.println("ACK received from Broker");
+				System.out.println("ACK received from Broker");
 				break;
-
 			default:
-				terminal.println("Unexpected packet" + packet.toString());
-
+				System.out.println("Unexpected packet" + packet.toString());
 			}
 
 		}
@@ -91,23 +88,19 @@ public class Dashboard extends Node {
 		byte[] buffer= null;
 		DatagramPacket packet= null;
 		String input;
-
-		input= terminal.read("Payload: ");
+		System.out.println("Payload: ");
+		input = scanner.nextLine();
+		scanner.close();
 		buffer = input.getBytes();
 
 		data = new byte[HEADER_LENGTH+buffer.length];
-
 		data[TYPE_POS] = DASHBOARD_SUBSCRIBE;						// To show Dashboard is sending message
-
 		data[LENGTH_POS] = (byte)buffer.length;
-
 		System.arraycopy(buffer, 0, data, HEADER_LENGTH, buffer.length);
-
-		terminal.println("Dashboard sending packet to broker...");
 		packet= new DatagramPacket(data, data.length);
 		packet.setSocketAddress(dstAddress);							// set socketAddress to Broker address
 		socket.send(packet);
-		terminal.println("Packet sent from Dashboard to Broker");
+		System.out.println("Packet sent from Dashboard to Broker");
 	}
 
 
@@ -122,13 +115,8 @@ public class Dashboard extends Node {
 			byte[] buffer = new byte[data[LENGTH_POS]];
 			buffer= new byte[data[LENGTH_POS]];
 			System.arraycopy(data, HEADER_LENGTH, buffer, 0, buffer.length);
-
 			content= new String(buffer);
-
-			terminal.println("|" + content + "|");
-			terminal.println("Length: " + content.length());
-			// You could test here if the String says "end" and terminate the
-			// program with a "this.notify()" that wakes up the start() method.
+			System.out.println("Received packet from Broker\nMessage from Broker to Dashboard was: "+content);
 			data = new byte[HEADER_LENGTH];
 			data[TYPE_POS] = TYPE_ACK;
 			data[ACKCODE_POS] = ACK_ALLOK;
@@ -136,9 +124,8 @@ public class Dashboard extends Node {
 			DatagramPacket response;
 			response = new DatagramPacket(data, data.length);
 			response.setSocketAddress(packet.getSocketAddress());
-			terminal.println("Dashboard sending ACK");
 			socket.send(response);
-			terminal.println("ACK sent from Dashboard");
+			System.out.println("ACK sent from Dashboard");
 			return content;
 		} catch(Exception e) {
 			e.printStackTrace();
@@ -150,10 +137,7 @@ public class Dashboard extends Node {
 	 * Sender Method
 	 *
 	 */
-	public synchronized void sendInstruction(String content) throws Exception {
-
-		
-		
+	public synchronized void sendInstruction(String content) throws Exception {		
 		String[] contentWords = content.split(" ");
 		for(String s : contentWords) {
 			s.trim();
@@ -163,7 +147,7 @@ public class Dashboard extends Node {
 		String temperatureValueString = contentWords[1];
 		if(!temperatureValueString.equalsIgnoreCase("Instructions_completed_as_per_request")) {
 			int temperatureValue = Integer.parseInt(temperatureValueString);
-			
+
 			String instruction = topic;
 			if(temperatureValue>30) {
 				instruction += " lower_temperature";
@@ -188,18 +172,17 @@ public class Dashboard extends Node {
 			data[LENGTH_POS] = (byte)buffer.length;
 
 			System.arraycopy(buffer, 0, data, HEADER_LENGTH, buffer.length);
-
-			terminal.println("Dashboard sending instruction to broker...");
 			packet= new DatagramPacket(data, data.length);
 			packet.setSocketAddress(dstAddress);
 			socket.send(packet);
-			terminal.println("Instruction sent from Dashboard to Broker");
+			System.out.println("Instruction sent from Dashboard to Broker");
 		}
-		
+
 	}
 
 	public synchronized void start() throws Exception {
-		terminal.println("Waiting for contact");
+		System.out.println("Waiting for contact");
+		subscribeToBroker();
 		this.wait();
 	}
 
@@ -208,8 +191,7 @@ public class Dashboard extends Node {
 	 */
 	public static void main(String[] args) {
 		try {
-			Terminal terminal= new Terminal("Dashboard");
-			(new Dashboard(terminal, DASHBOARD_PORT)).subscribeToBroker();
+			(new Dashboard(DASHBOARD_PORT)).start();
 		} catch(java.lang.Exception e) {e.printStackTrace();}
 	}
 }	

@@ -1,25 +1,15 @@
+/* @author: 	Stephen Davis (code extended from provided code on blackboard by lecturer Stefan Weber) 
+ * student id: 	18324401
+*/
+
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.io.IOException;
 import java.net.SocketAddress;
-import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Scanner;
 
-/**
- * @author Stephen Davis
- *	
- * Broker acts as a middleman between subscribers and publishers.
- * 
- * 		1) Subscribers (DASHBOARDs) subscribe to Broker with a given topic(s) & subtopic(s).
- * 		
- * 		2) Broker receives this subscription (packet) from Subscriber(s) and adds Subscriber(s) to Broker's list of subscribers.
- * 		
- * 		3) Broker receives a packet from the publisher (SENSOR) about a certain topic (and maybe subtopic), and forwards this packet to the 
- * 		relevant subscribers (DASHBOARDs).
- *
- */
 
 public class Broker extends Node {
 
@@ -30,21 +20,11 @@ public class Broker extends Node {
 	static final int FIRST_SENSOR_PORT = 50003; // Port of the Sensor (source)
 	static final int FIRST_ACTUATOR_PORT = (FIRST_SENSOR_PORT+NUMBER_OF_SENSORS+1); // Port of the broker (destination)
 
-
-	static final String DEFAULT_DST_NODE = "localhost";	// Name of the host for the Dashboard
-
-	//	static final String DEFAULT_DST_NODE = "localhost";	// Name of the host for the DASHBOARD
-
-	//	static final int DEFAULT_SRC_PORT = 50000; // Port of the SENSOR
-	//	static final int DEFAULT_DST_PORT = 50001; // Port of the DASHBOARD
-	//	static final String DEFAULT_DST_NODE = "localhost";	// Name of the host for the DASHBOARD
-
 	static final int HEADER_LENGTH = 2; // Fixed length of the header
 	static final int TYPE_POS = 0; // Position of the type within the header
 
 	static final byte TYPE_UNKNOWN = 0;
 
-	//	static final byte TYPE_STRING = 1; // Indicating a string payload
 	static final int LENGTH_POS = 1;
 
 	static final int ACKCODE_POS = 1; // Position of the acknowledgement type in the header
@@ -58,19 +38,16 @@ public class Broker extends Node {
 	static final byte DASHBOARD_PUBLISH = 6; // DASHBOARD
 	static final byte TYPE_ACK = 7;   // Indicating an acknowledgement
 
-	Terminal terminal;
-
-	// Subscribers are SENSORs
-
-	private static HashMap<String, ArrayList<SocketAddress>> subscriberMap = new HashMap();
-
+	Scanner scanner;
+	private static HashMap<String, ArrayList<SocketAddress>> subscriberMap = new HashMap<String, ArrayList<SocketAddress>>();
+	
 	static final int PACKETSIZE = 65536;
 
-	Broker(Terminal terminal, int port) {
+	Broker(int port) {
 		try {
-			this.terminal = terminal;
 			socket = new DatagramSocket(port);
 			listener.go();
+			scanner = new Scanner(System.in);
 		} catch(Exception e) {
 			e.printStackTrace();
 		}
@@ -80,9 +57,6 @@ public class Broker extends Node {
 	public synchronized void onReceipt(DatagramPacket packet) {
 		try {
 			String content;
-
-			byte[] buffer; 
-
 			byte[] data;
 			data = packet.getData();			
 
@@ -90,58 +64,48 @@ public class Broker extends Node {
 
 			switch(data[TYPE_POS]) {
 
-			// Dashboard trying to subscribe
 			case DASHBOARD_SUBSCRIBE:
-				terminal.println("Broker received subscription request from Dashboard");
+				System.out.println("Broker received subscription request from Dashboard");
 				content = sendACK(packet, data);
-
 				srcAddress = packet.getSocketAddress();				
 				checkSubscriptionExistsAndUpdate(content, srcAddress);
 				break;					
 
 			case TYPE_ACK:
-				terminal.println("Broker received ack");
-				//	this.notify();
+				System.out.println("Broker received ack");
 				break;
 
 			case ACTUATOR_SUBSCRIBE:
-				terminal.println("Broker received subscription request from Actuator");
-				// send ACK to Actuator (the publisher)
+				System.out.println("Broker received subscription request from Actuator");
 				content = sendACK(packet, data);
 				srcAddress = packet.getSocketAddress();
 				checkSubscriptionExistsAndUpdate(content, srcAddress);
 				break;
 
 			case SENSOR_PUBLISH:
-				terminal.println("Broker received packet from Sensor");
-				// send ACK to SENSOR (the publisher)
+				System.out.println("Broker received packet from Sensor");
 				content = sendACK(packet, data);
 				sendMessage(content);
-				this.notify();
 				break;			
 
 			case DASHBOARD_PUBLISH:
-				terminal.println("Broker received packet from Dashboard");
-				// send ACK to Dashboard (the publisher)
+				System.out.println("Broker received packet from Dashboard");
 				content = sendACK(packet, data);
 				sendMessage(content);				
-				this.notify();
 				break;
 
 			case ACTUATOR_PUBLISH:
-				terminal.println("Broker received packet from Actuator");
-				// send ACK to Dashboard (the publisher)
+				System.out.println("Broker received packet from Actuator");
 				content = sendACK(packet, data);
 				int instructionsIndex = content.indexOf("Instructions");
 				String firstHalf = content.substring(0, instructionsIndex);
 				String secondHalf = content.substring(instructionsIndex+12, content.length());
 				content = firstHalf+secondHalf;	
 				sendMessage(content);
-				this.notify();
 				break;
 
 			default:
-				terminal.println("Unexpected packet" + packet.toString());
+				System.out.println("Unexpected packet: " + packet.toString());
 			}
 		} catch (Exception e) {if (!(e instanceof SocketException)) e.printStackTrace();}
 	}
@@ -169,7 +133,7 @@ public class Broker extends Node {
 	}
 
 	public synchronized void start() throws Exception {
-		terminal.println("Broker waiting for contact");
+		System.out.println("Broker waiting for contact");
 		this.wait();
 	}
 
@@ -187,10 +151,6 @@ public class Broker extends Node {
 
 			content= new String(buffer);
 
-//			terminal.println("| " + content + " |");
-//			terminal.println("Length: " + content.length());
-			// You could test here if the String says "end" and terminate the
-			// program with a "this.notify()" that wakes up the start() method.
 			data = new byte[HEADER_LENGTH];
 			data[TYPE_POS] = TYPE_ACK;
 			data[ACKCODE_POS] = ACK_ALLOK;
@@ -198,10 +158,8 @@ public class Broker extends Node {
 			DatagramPacket response;
 			response = new DatagramPacket(data, data.length);
 			response.setSocketAddress(packet.getSocketAddress());
-			terminal.println("Broker sending ACK...");
 			socket.send(response);
-			terminal.println("ACK sent from Broker");
-			//			this.wait();
+			System.out.println("ACK sent from Broker");
 			return content;
 		} catch(Exception e) {
 			e.printStackTrace();
@@ -213,7 +171,7 @@ public class Broker extends Node {
 	 * Sender Method
 	 *
 	 */
-	public synchronized void sendMessage(String contentAsString/*, InetSocketAddress destinationAddress*/) throws Exception {
+	public synchronized void sendMessage(String contentAsString) throws Exception {
 
 		String[] contentWords = contentAsString.split(" ");
 		for(String s : contentWords) {
@@ -236,20 +194,19 @@ public class Broker extends Node {
 			System.arraycopy(buffer, 0, data, HEADER_LENGTH, buffer.length);
 
 			packet= new DatagramPacket(data, data.length);
-			terminal.println("Forwarding packet from Broker...");
+			System.out.println("Forwarding packet from Broker...");
 
 			for(SocketAddress dstAddress : l) {
 				packet.setSocketAddress(dstAddress);
 				socket.send(packet);
-				terminal.println("Packet sent");
+				System.out.println("Packet sent");
 			}
 		}
 	}
 
 	public static void main(String[] args) {
 		try {
-			Terminal terminal= new Terminal("Broker");
-			Broker broker = new Broker(terminal, BROKER_PORT);
+			Broker broker = new Broker(BROKER_PORT);
 			broker.start();
 		} catch(Exception e) {
 			e.printStackTrace();

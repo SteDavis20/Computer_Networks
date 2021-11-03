@@ -1,3 +1,7 @@
+/* @author: 	Stefan Weber (code provided on blackboard)
+ * student id: 	18324401
+*/
+
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.SocketException;

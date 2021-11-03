@@ -1,18 +1,23 @@
+/* @author: 	Stephen Davis (code extended from provided code on blackboard by lecturer Stefan Weber) 
+ * student id: 	18324401
+*/
+
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
+import java.util.Scanner;
 
 public class Actuator extends Node {
 
 	private static final int NUMBER_OF_SENSORS = 3;
-	private static final int NUMBER_OF_ACTUATORS = 3;
+//	private static final int NUMBER_OF_ACTUATORS = 3;
 
 	static final int BROKER_PORT = 50001; // Port of the broker (destination)
 	static final int DASHBOARD_PORT = 50002;
 	static final int FIRST_SENSOR_PORT = 50003; // Port of the Sensor (source)
 	static final int FIRST_ACTUATOR_PORT = (FIRST_SENSOR_PORT+NUMBER_OF_SENSORS+1); // Port of the broker (destination)
 
-	static final String DEFAULT_DST_NODE = "localhost";	// Name of the host for the ACTUATOR
+	static final String DEFAULT_DST_NODE = "broker";	// Name of the host for the ACTUATOR
 
 	static final int HEADER_LENGTH = 2;
 	static final int TYPE_POS = 0;
@@ -32,18 +37,15 @@ public class Actuator extends Node {
 	static final byte DASHBOARD_PUBLISH = 6; // DASHBOARD
 	static final byte TYPE_ACK = 7;   // Indicating an acknowledgement
 
-	Terminal terminal;
+	Scanner scanner;
 	InetSocketAddress dstAddress;
 
-	/*
-	 * 
-	 */
-	Actuator(Terminal terminal, int port) {
+	Actuator(int port) {
 		try {
-			this.terminal= terminal;
 			dstAddress = new InetSocketAddress(DEFAULT_DST_NODE, BROKER_PORT);
 			socket= new DatagramSocket(port);
 			listener.go();
+			scanner = new Scanner(System.in);
 		}
 		catch(java.lang.Exception e) {e.printStackTrace();}
 	}
@@ -58,21 +60,16 @@ public class Actuator extends Node {
 
 			data = packet.getData();			
 			switch(data[TYPE_POS]) {
-
 			// Broker has forwarded message from Dashboard
 			case BROKER:
 				content = sendACK(packet, data);
-				terminal.println("Message from Broker to Actuator was: "+content);
 				executeInstruction(content);
 				break;
-
-				// Received ACK from Broker
 			case TYPE_ACK:
-				terminal.println("Broker received my subscription");
+				System.out.println("Broker received my packet");
 				break;
-
 			default:
-				terminal.println("Unexpected packet" + packet.toString());
+				System.out.println("Unexpected packet: "+packet.toString());
 
 			}
 
@@ -93,36 +90,30 @@ public class Actuator extends Node {
 		String instruction = contentWords[1];
 
 		if(instruction.equalsIgnoreCase("good_job")) {
-			terminal.println("Continuing as normal");
+			System.out.println("Continuing as normal");
 		}
 		else if(instruction.equalsIgnoreCase("lower_temperature")) {
-			terminal.println("Lowering temperature");
+			System.out.println("Lowering temperature");
 		}
 		else if(instruction.equalsIgnoreCase("raise_temperature")) {
-			terminal.println("Raising temperature");
+			System.out.println("Raising temperature");
 		}
 
 		byte[] data= null;
 		byte[] buffer= null;
-
 		DatagramPacket packet= null;
-
 		String reply = topic + " Instructions_completed_as_per_request";
 		buffer = reply.getBytes();
-
 		data = new byte[HEADER_LENGTH+buffer.length];
-
 		data[TYPE_POS] = ACTUATOR_PUBLISH;						// To show ACTUATOR is sending message
-
 		data[LENGTH_POS] = (byte)buffer.length;
 
 		System.arraycopy(buffer, 0, data, HEADER_LENGTH, buffer.length);
 
-		terminal.println("Actuator sending packet to broker...");
 		packet= new DatagramPacket(data, data.length);
 		packet.setSocketAddress(dstAddress);							// set socketAddress to Broker address
 		socket.send(packet);
-		terminal.println("Packet sent from Actuator to Broker");
+		System.out.println("Packet sent from Actuator to Broker");
 	}
 
 	/**
@@ -134,23 +125,21 @@ public class Actuator extends Node {
 		byte[] buffer= null;
 		DatagramPacket packet= null;
 		String input;
-
-		input= terminal.read("Payload: ");
+		
+		System.out.println("Payload: ");
+		input = scanner.nextLine();
+//		scanner.close();
 		buffer = input.getBytes();
-
 		data = new byte[HEADER_LENGTH+buffer.length];
-
-		data[TYPE_POS] = ACTUATOR_SUBSCRIBE;						// To show ACTUATOR is sending message
-
+		data[TYPE_POS] = ACTUATOR_SUBSCRIBE;						
 		data[LENGTH_POS] = (byte)buffer.length;
 
 		System.arraycopy(buffer, 0, data, HEADER_LENGTH, buffer.length);
 
-		terminal.println("Actuator sending packet to broker...");
 		packet= new DatagramPacket(data, data.length);
 		packet.setSocketAddress(dstAddress);							// set socketAddress to Broker address
 		socket.send(packet);
-		terminal.println("Packet sent from Actuator to Broker");
+		System.out.println("Packet sent from Actuator to Broker");
 	}
 
 	/**
@@ -160,17 +149,11 @@ public class Actuator extends Node {
 	public synchronized String sendACK(DatagramPacket packet, byte[] data) throws Exception {
 		try {
 			String content;
-
 			byte[] buffer = new byte[data[LENGTH_POS]];
 			buffer= new byte[data[LENGTH_POS]];
 			System.arraycopy(data, HEADER_LENGTH, buffer, 0, buffer.length);
-
 			content= new String(buffer);
-
-			terminal.println("|" + content + "|");
-			terminal.println("Length: " + content.length());
-			// You could test here if the String says "end" and terminate the
-			// program with a "this.notify()" that wakes up the start() method.
+			System.out.println("Received packet from Broker\nMessage from Broker to Actuator was: "+content);
 			data = new byte[HEADER_LENGTH];
 			data[TYPE_POS] = TYPE_ACK;
 			data[ACKCODE_POS] = ACK_ALLOK;
@@ -178,9 +161,8 @@ public class Actuator extends Node {
 			DatagramPacket response;
 			response = new DatagramPacket(data, data.length);
 			response.setSocketAddress(packet.getSocketAddress());
-			terminal.println("Actuator sending ACK");
 			socket.send(response);
-			terminal.println("ACK sent from Actuator");
+			System.out.println("ACK sent from Actuator");
 			return content;
 		} catch(Exception e) {
 			e.printStackTrace();
@@ -189,7 +171,8 @@ public class Actuator extends Node {
 	}
 
 	public synchronized void start() throws Exception {
-		terminal.println("Waiting for contact");
+		System.out.println("Waiting for contact");
+		subscribeToBroker();
 		this.wait();
 	}
 
@@ -198,11 +181,11 @@ public class Actuator extends Node {
 	 */
 	public static void main(String[] args) {
 		try {
-			for(int i=0; i<NUMBER_OF_ACTUATORS; i++) {
-				Terminal terminal= new Terminal("Actuator " + (i+1));
-				Actuator actuator = new Actuator(terminal, FIRST_ACTUATOR_PORT + (i+1));
-				actuator.subscribeToBroker();
-			}
+//			for(int i=0; i<NUMBER_OF_ACTUATORS; i++) {
+//				Actuator actuator = new Actuator(FIRST_ACTUATOR_PORT + (i+1));
+				Actuator actuator = new Actuator(FIRST_ACTUATOR_PORT + (1));
+				actuator.start();
+//			}
 		} catch(java.lang.Exception e) {e.printStackTrace();}
 	}
 }
